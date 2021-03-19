@@ -41,6 +41,7 @@ sys.ddesolver = {@dde23a};         % solver (dde23a can be faster than dde23 for
 sol = bdSolve(sys,tspan);          % call the solver
 tplot = 0:1:tspan(end);            % time domain of interest
 V = bdEval(sol,tplot,(1:nnodes)).';% extract/interpolate the solution
+save('Data.mat', 'V')
 figure, plot(tplot,V);             % plot the result
 xlabel('t (ms)'); ylabel('V');
 
