@@ -44,7 +44,7 @@ def set_osc_pars(strength, QV_Max = 1.0, VT = 0.0, delta_V = 0.65):
                                         aie = np.array([2.0]), ane = np.array([1.0]),
                                         aei = np.array([2.0]), ani = np.array([0.4]),
                                         Iext = np.array([0.3]), tau_K = np.array([1.0]),
-                                        C = coupled_C, t_scale = np.array([0.05]))
+                                        C = coupled_C, t_scale = np.array([1.0]))
 
     return oscillator
 
@@ -295,7 +295,7 @@ def substitute_artificial_hist(length, oscillator, wm, integrator, what_to_watch
 
     sim.current_state[0, :] = v_fixed.reshape(numnodes, 1)
     sim.current_state[1, :] = np.random.default_rng().uniform(0.0, 0.6, numnodes).reshape(numnodes, 1)
-    sim.current_state[2, :] = np.random.default_rng().uniform(-0.13, 0.03, numnodes).reshape(numnodes, 1)
+    sim.current_state[2, :] = np.random.default_rng().uniform(-0.03, 0.13, numnodes).reshape(numnodes, 1)
 
     return sim
 
@@ -617,7 +617,7 @@ def plot_in_lengths(tracts, positions, saveloc, show = False):
     length_ax.set_xticks([])
     length_ax.set_yticks([])
     length_ax.set_zticks([])
-    scat = length_ax.scatter(positions[:256, 0], positions[:256, 1], positions[:256, 2], c = in_lengths[0:256], cmap = 'coolwarm', s = 1000)
+    scat = length_ax.scatter(positions[:, 0], positions[:, 1], positions[:, 2], c = in_lengths, cmap = 'coolwarm', s = 1000)
     scat.set_array(in_lengths)
     col = plt.colorbar(scat)
     col.set_label('Mean In-Length (mm)', size = 20, rotation = 270, labelpad = 30)
