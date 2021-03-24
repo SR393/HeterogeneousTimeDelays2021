@@ -44,12 +44,12 @@ def set_osc_pars(strength, QV_Max = 1.0, VT = 0.0, delta_V = 0.65):
                                         aie = np.array([2.0]), ane = np.array([1.0]),
                                         aei = np.array([2.0]), ani = np.array([0.4]),
                                         Iext = np.array([0.3]), tau_K = np.array([1.0]),
-                                        C = coupled_C, t_scale = np.array([1.0]))
+                                        C = coupled_C, t_scale = np.array([0.05]))
 
     return oscillator
 
 
-def set_init_coup(weights, a = 0.5, b = 1.0, midpoint = 0.0, sigma = 0.65):
+def set_init_coup(coupling, weights, a = 0.5, b = 1.0, midpoint = 0.0, sigma = 0.65):
 
 # Sets initial coupling parameters and connection weights
 
@@ -57,8 +57,6 @@ def set_init_coup(weights, a = 0.5, b = 1.0, midpoint = 0.0, sigma = 0.65):
     b = np.array([b])
     midpoint = np.array([midpoint])
     sigma = np.array([sigma])
-
-    global coupling
 
     coupling = coupling.HyperbolicTangent(a = a, midpoint = midpoint,
                                           b = b, sigma = sigma)
@@ -128,6 +126,7 @@ def surrogate_mats_Weibull(tracts, x):
     return new_tracts
 
 def get_euc_dists(positions):
+#Returns matrix of Euclidean distances between nodes given locations in 3D space.
 
     numnodes = int(positions.shape[0])
     Euclidean_dist = np.empty((numnodes, numnodes))
@@ -275,7 +274,30 @@ def threshold_weights(weights, x):
 
     return weights
 
-def substitute_artificial_hist(length, oscillator, wm, integrator, what_to_watch):
+def substitute_const_hist(length, oscillator, wm, integrator, what_to_watch, coupling):
+
+# Substitutes history of value 0 for all state variables and all nodes
+
+    sim = simulator.Simulator(model = oscillator, connectivity = wm,
+                            coupling = coupling, integrator = integrator, 
+                            monitors = what_to_watch, simulation_length = length,
+                            conduction_speed = 100.00).configure()
+    
+    numnodes = wm.weights.shape[0]
+
+    v_fixed = np.zeros(numnodes)
+
+    for i in range(numnodes):
+
+        sim.history.buffer[:, 0, i, 0] = v_fixed[i]*np.ones(sim.history.buffer.shape[0])
+
+    sim.current_state[0, :] = v_fixed.reshape(numnodes, 1)
+    sim.current_state[1, :] = np.zeros(numnodes).reshape(numnodes, 1)
+    sim.current_state[2, :] = np.zeros(numnodes).reshape(numnodes, 1)
+
+    return sim
+
+def substitute_artificial_hist(length, oscillator, wm, integrator, what_to_watch, coupling):
 
 #Substitutes constant history of length 'length' for each variable at each node,
 #values chosen randomly from intervals specific to each variable
@@ -299,7 +321,7 @@ def substitute_artificial_hist(length, oscillator, wm, integrator, what_to_watch
 
     return sim
 
-def run_history_sim(length, folder, oscillator, wm, integrator, what_to_watch):
+def run_history_sim(length, folder, oscillator, wm, integrator, what_to_watch, coupling):
 
 #Runs simulation of length 'length' to determine the history of each variable at each node, decoupling
 #all nodes so that the history for each is identical to all others.
@@ -490,6 +512,7 @@ def surrogate_mats_shuffle(tracts, positions, no_bins = 100):
     return new_tracts
 
 def create_IHCC(data, numnodes, opts, saveloc):
+# Creates interhemispheric cross correlations from input connectome data. Convenience function to reduce script length elsewehere.
 
     left = np.arange(0, int(numnodes/2))
     right = np.arange(int(numnodes/2), numnodes)
@@ -497,6 +520,7 @@ def create_IHCC(data, numnodes, opts, saveloc):
     io.savemat(saveloc+'.mat', {'IHCC':IHCC})
 
 def IHCC_plot(data_loc, numnodes, opts, simlength, dt, saveloc):
+# Plots interhemispheric cross correlations. Convenience function to reduce script length elsewhere.
 
     #Inputs to pycohcorrgram
     maxlag = opts['maxlag']
@@ -544,6 +568,7 @@ def identify_transitions_IHCC(data_loc, filename_base, thrsh, dt):
     return np.array(transition_times)
 
 def pyphase_nodes(y):
+# Extracts instantaneous Hilbert phases from input signal y
 
     phases = np.zeros(y.shape)
 
@@ -555,6 +580,7 @@ def pyphase_nodes(y):
     return phases
 
 def order_parameters(data, thrshs, positions, saveloc):
+#Finds local order parameter (rlocal) for data for all set-defining radii thrshs
 
     #define euclidean distances between nodes
     #to determine which fall inside radius of inclusion 
@@ -593,6 +619,7 @@ def order_parameters(data, thrshs, positions, saveloc):
     io.savemat(saveloc, {'rlocals':Rlocals, 'radii':thrshs})
 
 def rlocal_plots(data, thrshs, saveloc):
+#plots data from 'order_parameters' to create 'coherence curves'
 
     data = data[0]
     data[0] = 1 #First point otherwise NAN
@@ -608,6 +635,7 @@ def rlocal_plots(data, thrshs, saveloc):
     plt.savefig(saveloc)
 
 def plot_in_lengths(tracts, positions, saveloc, show = False):
+#Plots mean length of tracts connecting each node as a colour associated with the node in 3D space
 
     in_lengths = np.mean(tracts, axis = 0)
 
@@ -626,6 +654,7 @@ def plot_in_lengths(tracts, positions, saveloc, show = False):
     plt.savefig(saveloc)
 
 def inst_freq(data, time):
+#Calculate 'instanteneous frequencies' as derivative of instanteneous Hilbert phases
 
     phases = pyphase_nodes(data)
     phases_shifted = np.roll(phases, -1, axis = 0)
@@ -637,3 +666,40 @@ def inst_freq(data, time):
     inst_freqs = dphase/dt
 
     return inst_freqs, time[:len(time)-1]
+
+def coherence_classification(radii, rlocal_curve, sync_coh_thresh, part_inc_thresh):
+#Uses coherence curve curvature values (calculate using 'order_parameters') to automatically classify simulation dynamics as 
+#Synchronised, Coherent, Partially Coherent, or Incoherent. Thresholds are defined to distinguish between synchronised vs coherent
+#dynamics and partially coherent vs incoherent dynamics
+
+    classes = ['Synchronised', 'Coherent', 'Partially Coherent', 'Incoherent']
+
+    d2curve = np.roll(rlocal_curve, -1) - 2*rlocal_curve + np.roll(rlocal_curve, 1)
+    d2curve = d2curve[1:len(d2curve)-1]
+    dr = np.roll(radii, -1) - radii
+    dr = dr[1:len(dr)-1]
+    dr2 = dr*dr
+    d2curvedr2 = d2curve/dr2
+
+    if all(d2curvedr2 <= 0):
+        #If curvature magnitude is small, classify 'Synchronised'
+        if all(np.abs(d2curvedr2)<sync_coh_thresh):
+
+            return classes[0]
+        #Otherwise 'Coherent'
+        else:
+
+            return classes[1]
+    
+    else:
+
+        post_inflection = d2curvedr2[np.nonzero(d2curvedr2 > 0)]
+        
+        #If curvature magnitude following inflection is small, classify 'Partially Coherent'
+        if all(np.abs(post_inflection) < part_inc_thresh):
+
+            return classes[2]
+        #Otherwise 'Incoherent'
+        else:
+
+            return classes[3]
